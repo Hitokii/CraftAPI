@@ -10,18 +10,13 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
-import org.bukkit.inventory.ItemStack;
-
-import com.google.gson.JsonObject;
 
 import dev.hitokii.craftapi.Main;
-import dev.hitokii.craftapi.ServerClass;
 
 public class registerChest implements CommandExecutor {
     
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        ServerClass server = ServerClass.getInstance();
 
         if (!(sender instanceof Player)) {
           Logger.getLogger("Minecraft").info("This command can only be run by a player.");
