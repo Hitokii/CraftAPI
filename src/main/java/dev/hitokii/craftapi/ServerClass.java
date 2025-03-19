@@ -3,11 +3,14 @@ package dev.hitokii.craftapi;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.util.List;
 import java.util.logging.Logger;
 
+import org.bukkit.block.Block;
+import org.bukkit.block.Chest;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 
-import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.sun.net.httpserver.HttpExchange;
@@ -15,38 +18,56 @@ import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 
 public class ServerClass {
-  
+
   // Instance
   private static ServerClass instance;
-  private GsonBuilder builder = new GsonBuilder();
-  private Gson gson = builder.create();
 
   // Variables
   private HttpServer server;
-  private int port = 8080;
-  private JsonObject jsonData = null;
-
+  private int port = Main.getProvidingPlugin(getClass()).getConfig().getInt("port");
 
   private HttpHandler handler = new HttpHandler() {
     @Override
     public void handle(HttpExchange exchange) throws IOException {
-        addJsonData("players", fetchUsers());
-        // Fetch the latest data dynamically
-        JsonObject latestData = getLatestData(); // Method to fetch the latest data
-        String response = gson.toJson(latestData);
+      try {
+        JsonObject jsonFile = new JsonObject();
 
+        Logger.getLogger("Minecraft").info("Handler called");
+
+        if (Main.getProvidingPlugin(getClass()).getConfig().getBoolean("data.players")) {
+          Logger.getLogger("Minecraft").info("Fetching players");
+          jsonFile.add("players", fetchUsers());
+        }
+
+        if (Main.getProvidingPlugin(getClass()).getConfig().getConfigurationSection("data.chests") != null) {
+          for (String key : Main.getProvidingPlugin(getClass()).getConfig().getConfigurationSection("data.chests")
+              .getKeys(false)) {
+            List<Integer> coords = Main.getProvidingPlugin(getClass()).getConfig().getIntegerList("data.chests." + key);
+            JsonObject chestData = fetchChest(coords.get(0), coords.get(1), coords.get(2));
+            if (chestData != null)
+              jsonFile.add(key, chestData);
+          }
+        }
+
+        Logger.getLogger("Minecraft").info("Sending response");
+
+        String response = new GsonBuilder().create().toJson(jsonFile);
         exchange.sendResponseHeaders(200, response.length());
         try (OutputStream os = exchange.getResponseBody()) {
-            os.write(response.getBytes());
+          os.write(response.getBytes());
+        } catch (Exception e) {
+          e.printStackTrace();
         }
-    }
-};
-  
+      } catch (Exception e) {
+        Logger.getLogger("Minecraft").severe("Error in handler: " + e.getMessage());
+        e.printStackTrace();
+        exchange.sendResponseHeaders(500, -1); // Send a 500 Internal Server Error response
+      }
+    };
+  };
 
   // Constructor
   private ServerClass() {
-    // Initialize the instance
-    Logger.getLogger("Minecraft").info("Initializing server class");
     instance = this;
   }
 
@@ -57,7 +78,9 @@ public class ServerClass {
       server.createContext("/", handler);
       server.setExecutor(null);
       server.start();
+      Logger.getLogger("Minecraft").info("Server started successfully on port " + port);
     } catch (IOException e) {
+      Logger.getLogger("Minecraft").severe("Failed to start server: " + e.getMessage());
       e.printStackTrace();
     }
   }
@@ -71,41 +94,9 @@ public class ServerClass {
     this.port = port;
   }
 
-  public void setDisplayData(String data) {
-    if (handler != null) 
-      server.removeContext("/");
-    
-    // Display the data
-    handler = new HttpHandler() {
-      @Override
-      public void handle(HttpExchange exchange) throws IOException {
-        // Handle the request
-
-        String response = data;
-        exchange.sendResponseHeaders(200, response.length());
-                  try (OutputStream os = exchange.getResponseBody()) {
-                      os.write(response.getBytes());
-                  }
-
-      }
-    };
-
-    server.createContext("/", handler);
-  }
-
-  public void clearJson() {
-    jsonData = new JsonObject();
-  }
-
-  public void addJsonData(String name, JsonObject data) {
-    if (jsonData == null)
-      jsonData = new JsonObject();
-      
-    jsonData.add(name, data);
-  }
-
   private JsonObject fetchUsers() {
     JsonObject players = new JsonObject();
+    Logger.getLogger("Minecraft").info("Fetching players");
 
     for (Player player : Main.getProvidingPlugin(getClass()).getServer().getOnlinePlayers()) {
       JsonObject playerData = new JsonObject();
@@ -122,20 +113,50 @@ public class ServerClass {
     return players;
   }
 
-  private JsonObject getLatestData() {
-    // You can modify this to fetch or compute the latest data dynamically
-    return jsonData;
+  private JsonObject fetchChest(int x, int y, int z) {
+    Logger.getLogger("Minecraft").info("Fetching chest at " + x + ", " + y + ", " + z);
+
+    String worldName = Main.getProvidingPlugin(getClass()).getConfig().getString("world_name");
+    JsonObject chestData = new JsonObject();
+
+    try {
+        // Run the block access on the main server thread
+        Main.getProvidingPlugin(getClass()).getServer().getScheduler().callSyncMethod(Main.getProvidingPlugin(getClass()), () -> {
+            Block block = Main.getProvidingPlugin(getClass()).getServer().getWorlds().stream()
+                .filter(world -> world.getName().equals(worldName)).findFirst().get().getBlockAt(x, y, z);
+
+            if (block == null || !(block.getState() instanceof Chest)) {
+                Logger.getLogger("Minecraft").warning("Block is not a chest or does not exist.");
+                return null;
+            }
+
+            Chest chest = (Chest) block.getState();
+            for (ItemStack item : chest.getBlockInventory().getContents()) {
+                if (item != null) {
+                    if (chestData.has(item.getType().name())) {
+                        chestData.addProperty(item.getType().name(),
+                            chestData.get(item.getType().name()).getAsInt() + item.getAmount());
+                    } else {
+                        chestData.addProperty(item.getType().name(), item.getAmount());
+                    }
+                }
+            }
+            return null;
+        }).get(); // Wait for the task to complete
+    } catch (Exception e) {
+        Logger.getLogger("Minecraft").severe("Error fetching chest data: " + e.getMessage());
+        e.printStackTrace();
+    }
+
+    return chestData;
 }
 
   // Get the instance
-  public static ServerClass getInstance()
-  {
+  public static ServerClass getInstance() {
     if (instance == null) {
       instance = new ServerClass();
     }
     return instance;
   }
-
-
 
 }

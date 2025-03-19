@@ -1,0 +1,11 @@
+# Server
+port: 8080
+world_name: world
+
+# Data
+data:
+  players: true # turn to false to prevent player listing
+  chests: {} #remove bracket if you want to add chest
+    # exemple_name: [coord_x, coord_y, coord_z]
+  nbts: {} #remove bracket if you want to add nbt
+    # exemple_name: [coord_x, coord_y, coord_z]

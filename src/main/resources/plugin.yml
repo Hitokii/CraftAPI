@@ -10,9 +10,6 @@ commands:
   startserver:
     description: Starts the server
     usage: /<command>
-  showText:
-    description: Shows a message
-    usage: /<command> <message>
   registerchest:
     description: Registers a chest
     usage: /<command> <chestname>

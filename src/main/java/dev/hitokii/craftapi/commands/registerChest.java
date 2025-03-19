@@ -14,6 +14,7 @@ import org.bukkit.inventory.ItemStack;
 
 import com.google.gson.JsonObject;
 
+import dev.hitokii.craftapi.Main;
 import dev.hitokii.craftapi.ServerClass;
 
 public class registerChest implements CommandExecutor {
@@ -36,17 +37,8 @@ public class registerChest implements CommandExecutor {
           return true;
         }
 
-        Chest chest = (Chest) block.getState();
-        JsonObject chestData = new JsonObject();
-
-        for (ItemStack item : chest.getBlockInventory().getContents())
-            if (item != null) 
-            if (chestData.has(item.getType().name()))
-                chestData.addProperty(item.getType().name(), chestData.get(item.getType().name()).getAsInt() + item.getAmount());
-            else 
-              chestData.addProperty(item.getType().name(), item.getAmount());
-
-        server.addJsonData(args[0], chestData);
+        Logger.getLogger("Minecraft").info("Registering chest: " + args[0] + " at " + block.getLocation().toString());
+        Main.getProvidingPlugin(getClass()).getConfig().set("data/chests/" + args[0], block.getLocation());
 
         return true;
     }
